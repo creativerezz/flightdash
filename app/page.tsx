@@ -104,8 +104,9 @@ export default function Page() {
       {/* Sidebar / List View */}
       <div
         className={cn(
-          "flex flex-col bg-card lg:w-[380px] lg:border-r",
-          mobileView === "map" ? "hidden lg:flex" : "flex flex-1 lg:flex-none"
+          "flex flex-col bg-card lg:w-[380px] lg:border-r lg:static lg:z-auto",
+          "absolute inset-0 z-10 lg:inset-auto",
+          mobileView === "map" ? "-translate-x-full lg:translate-x-0" : "translate-x-0"
         )}
       >
         {/* Header */}
@@ -193,11 +194,7 @@ export default function Page() {
       </div>
 
       {/* Map View */}
-      <div
-        className={cn(
-          "relative flex-1 min-h-0",
-          mobileView === "list" ? "hidden lg:block" : "block"
-        )}
+      <div className="relative flex-1 min-h-0"
       >
         <Map center={center} zoom={8} className="h-full min-h-[50vh]">
           {displayedAircraft.map((ac) => (

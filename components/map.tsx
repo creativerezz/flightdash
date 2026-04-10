@@ -73,6 +73,37 @@ export function Map({ center, zoom = 7, children, className }: MapProps) {
     }
   }, [center]);
 
+  // Handle resize when container becomes visible
+  useEffect(() => {
+    const handleResize = () => {
+      map.current?.resize();
+    };
+
+    // Resize on window resize
+    window.addEventListener("resize", handleResize);
+
+    // Resize when visibility changes (tab switch)
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            setTimeout(() => map.current?.resize(), 100);
+          }
+        });
+      },
+      { threshold: 0.1 }
+    );
+
+    if (mapContainer.current) {
+      observer.observe(mapContainer.current);
+    }
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      observer.disconnect();
+    };
+  }, []);
+
   return (
     <div className={`relative ${className || ""}`}>
       <div ref={mapContainer} className="absolute inset-0" />
