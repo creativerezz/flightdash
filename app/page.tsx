@@ -197,12 +197,14 @@ export default function Page() {
 
         {/* Map View */}
         <div className="flex-1 relative lg:flex w-full h-full">
-          {/* On mobile, only show map when map tab is active */}
-          <div className={cn(
-            "absolute inset-0 lg:static lg:inset-auto",
-            mobileView === "map" ? "z-0" : "z-0 lg:z-auto",
-            mobileView === "list" ? "hidden lg:block" : "block"
-          )}>
+          {/* On mobile, use key to force Map re-mount when tab changes - ensures proper dimensions */}
+          <div 
+            key={`map-${mobileView}`}
+            className={cn(
+              "absolute inset-0 lg:static lg:inset-auto",
+              mobileView === "map" ? "block" : "hidden lg:block"
+            )}
+          >
             <Map center={center} zoom={8} className="w-full h-full">
               {displayedAircraft.map((ac) => (
                 <Marker
