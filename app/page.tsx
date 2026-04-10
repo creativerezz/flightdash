@@ -27,11 +27,14 @@ interface AircraftData {
   center: { lat: number; lon: number };
 }
 
-function FlyToButton({ lat, lon }: { lat: number; lon: number }) {
+function FlyToButton({ lat, lon, onClick }: { lat: number; lon: number; onClick?: () => void }) {
   const { map } = useMap();
   return (
     <button
-      onClick={() => map?.flyTo({ center: [lon, lat], zoom: 12 })}
+      onClick={() => {
+        map?.flyTo({ center: [lon, lat], zoom: 12 });
+        onClick?.();
+      }}
       className="text-xs text-muted-foreground hover:text-primary transition-colors"
     >
       Fly to
@@ -45,6 +48,7 @@ export default function Page() {
   const [militaryOnly, setMilitaryOnly] = useState(false);
   const [selectedHex, setSelectedHex] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  const [mobileView, setMobileView] = useState<"list" | "map">("list");
 
   const fetchData = useCallback(async () => {
     try {
@@ -74,9 +78,36 @@ export default function Page() {
     : [-117.388, 34.451];
 
   return (
-    <div className="flex h-screen bg-background">
-      {/* Sidebar */}
-      <div className="w-[380px] flex flex-col border-r bg-card">
+    <div className="h-screen bg-background flex flex-col lg:flex-row">
+      {/* Mobile Tab Toggle */}
+      <div className="lg:hidden flex border-b bg-card">
+        <button
+          onClick={() => setMobileView("list")}
+          className={cn(
+            "flex-1 py-3 text-sm font-medium",
+            mobileView === "list" ? "border-b-2 border-primary" : "text-muted-foreground"
+          )}
+        >
+          List ({displayedAircraft.length})
+        </button>
+        <button
+          onClick={() => setMobileView("map")}
+          className={cn(
+            "flex-1 py-3 text-sm font-medium",
+            mobileView === "map" ? "border-b-2 border-primary" : "text-muted-foreground"
+          )}
+        >
+          Map
+        </button>
+      </div>
+
+      {/* Sidebar / List View */}
+      <div
+        className={cn(
+          "flex flex-col bg-card lg:w-[380px] lg:border-r",
+          mobileView === "map" ? "hidden lg:flex" : "flex flex-1 lg:flex-none"
+        )}
+      >
         {/* Header */}
         <div className="p-4 border-b">
           <h1 className="text-lg font-semibold">🛩️ FlightDash</h1>
@@ -116,7 +147,10 @@ export default function Page() {
           {displayedAircraft.map((ac) => (
             <div
               key={ac.hex}
-              onClick={() => setSelectedHex(ac.hex)}
+              onClick={() => {
+                setSelectedHex(ac.hex);
+                setMobileView("map");
+              }}
               className={cn(
                 "p-3 border-b cursor-pointer transition-colors",
                 selectedHex === ac.hex ? "bg-accent" : "hover:bg-muted"
@@ -142,7 +176,11 @@ export default function Page() {
                     <span>{ac.altitude !== "N/A" ? `${ac.altitude} ft` : "N/A"}</span>
                   </div>
                 </div>
-                <FlyToButton lat={ac.lat} lon={ac.lon} />
+                <FlyToButton 
+                  lat={ac.lat} 
+                  lon={ac.lon} 
+                  onClick={() => setMobileView("map")}
+                />
               </div>
             </div>
           ))}
@@ -154,9 +192,14 @@ export default function Page() {
         </div>
       </div>
 
-      {/* Map */}
-      <div className="flex-1 relative">
-        <Map center={center} zoom={8} className="h-full">
+      {/* Map View */}
+      <div
+        className={cn(
+          "relative flex-1 min-h-0",
+          mobileView === "list" ? "hidden lg:block" : "block"
+        )}
+      >
+        <Map center={center} zoom={8} className="h-full min-h-[50vh]">
           {displayedAircraft.map((ac) => (
             <Marker
               key={ac.hex}
@@ -169,7 +212,7 @@ export default function Page() {
 
         {/* Selected Aircraft Panel */}
         {selectedHex && (
-          <div className="absolute top-4 right-4 bg-card border rounded-lg p-4 shadow-lg min-w-[250px]">
+          <div className="absolute top-4 right-4 left-4 lg:left-auto bg-card border rounded-lg p-4 shadow-lg lg:min-w-[250px] max-w-sm">
             {(() => {
               const ac = data?.aircraft.find((a) => a.hex === selectedHex);
               if (!ac) return null;
