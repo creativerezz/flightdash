@@ -75,6 +75,8 @@ export function Map({ center, zoom = 7, children, className }: MapProps) {
 
   // Handle resize when container becomes visible
   useEffect(() => {
+    if (!mounted) return;
+    
     const handleResize = () => {
       map.current?.resize();
     };
@@ -98,11 +100,14 @@ export function Map({ center, zoom = 7, children, className }: MapProps) {
       observer.observe(mapContainer.current);
     }
 
+    // Initial resize after mount
+    setTimeout(() => map.current?.resize(), 100);
+
     return () => {
       window.removeEventListener("resize", handleResize);
       observer.disconnect();
     };
-  }, []);
+  }, [mounted]);
 
   return (
     <div className={`relative ${className || ""}`}>
