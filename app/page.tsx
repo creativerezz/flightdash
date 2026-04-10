@@ -1,19 +1,234 @@
-import { Button } from "@/components/ui/button"
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
+import { Map, Marker, useMap } from "@/components/map";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+interface Aircraft {
+  hex: string;
+  callsign: string;
+  lat: number;
+  lon: number;
+  altitude: number | string;
+  speed: number | string;
+  heading: number | string;
+  type: string;
+  registration: string;
+  distance: number;
+  isMilitary: boolean;
+  category: string;
+}
+
+interface AircraftData {
+  count: number;
+  militaryCount: number;
+  aircraft: Aircraft[];
+  center: { lat: number; lon: number };
+}
+
+function FlyToButton({ lat, lon }: { lat: number; lon: number }) {
+  const { map } = useMap();
+  return (
+    <button
+      onClick={() => map?.flyTo({ center: [lon, lat], zoom: 12 })}
+      className="text-xs text-muted-foreground hover:text-primary transition-colors"
+    >
+      Fly to
+    </button>
+  );
+}
 
 export default function Page() {
+  const [data, setData] = useState<AircraftData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [militaryOnly, setMilitaryOnly] = useState(false);
+  const [selectedHex, setSelectedHex] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+
+  const fetchData = useCallback(async () => {
+    try {
+      const res = await fetch("/api/aircraft");
+      const json = await res.json();
+      setData(json);
+      setLastUpdated(new Date());
+    } catch (e) {
+      console.error("Failed to fetch aircraft:", e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, 10000);
+    return () => clearInterval(interval);
+  }, [fetchData]);
+
+  const displayedAircraft = militaryOnly
+    ? data?.aircraft.filter((a) => a.isMilitary) || []
+    : data?.aircraft || [];
+
+  const center: [number, number] = data
+    ? [data.center.lon, data.center.lat]
+    : [-117.388, 34.451];
+
   return (
-    <div className="flex min-h-svh p-6">
-      <div className="flex max-w-md min-w-0 flex-col gap-4 text-sm leading-loose">
-        <div>
-          <h1 className="font-medium">Project ready!</h1>
-          <p>You may now add components and start building.</p>
-          <p>We&apos;ve already added the button component for you.</p>
-          <Button className="mt-2">Button</Button>
+    <div className="flex h-screen bg-background">
+      {/* Sidebar */}
+      <div className="w-[380px] flex flex-col border-r bg-card">
+        {/* Header */}
+        <div className="p-4 border-b">
+          <h1 className="text-lg font-semibold">🛩️ FlightDash</h1>
+          <p className="text-xs text-muted-foreground mt-1">
+            200-mile radius • Victorville, CA
+          </p>
+          {data && (
+            <div className="flex gap-4 mt-3 text-sm">
+              <div>
+                <span className="text-muted-foreground">Total:</span>{" "}
+                <span className="font-medium">{data.count}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Military:</span>{" "}
+                <span className="font-medium text-amber-500">
+                  {data.militaryCount}
+                </span>
+              </div>
+            </div>
+          )}
+          <div className="flex items-center justify-between mt-3">
+            <Button
+              variant={militaryOnly ? "default" : "outline"}
+              size="sm"
+              onClick={() => setMilitaryOnly(!militaryOnly)}
+            >
+              {militaryOnly ? "Showing Military" : "Show Military Only"}
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              {loading ? "Updating..." : `Updated ${lastUpdated.toLocaleTimeString()}`}
+            </span>
+          </div>
         </div>
-        <div className="font-mono text-xs text-muted-foreground">
-          (Press <kbd>d</kbd> to toggle dark mode)
+
+        {/* Aircraft List */}
+        <div className="flex-1 overflow-auto">
+          {displayedAircraft.map((ac) => (
+            <div
+              key={ac.hex}
+              onClick={() => setSelectedHex(ac.hex)}
+              className={cn(
+                "p-3 border-b cursor-pointer transition-colors",
+                selectedHex === ac.hex ? "bg-accent" : "hover:bg-muted"
+              )}
+            >
+              <div className="flex items-start justify-between">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-medium truncate">
+                      {ac.callsign || "N/A"}
+                    </span>
+                    {ac.isMilitary && (
+                      <span className="text-[10px] bg-amber-500/20 text-amber-600 px-1.5 py-0.5 rounded">
+                        MIL
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1 space-x-2">
+                    <span>{ac.type || "Unknown"}</span>
+                    <span>•</span>
+                    <span>{ac.distance} mi</span>
+                    <span>•</span>
+                    <span>{ac.altitude !== "N/A" ? `${ac.altitude} ft` : "N/A"}</span>
+                  </div>
+                </div>
+                <FlyToButton lat={ac.lat} lon={ac.lon} />
+              </div>
+            </div>
+          ))}
+          {displayedAircraft.length === 0 && !loading && (
+            <div className="p-8 text-center text-muted-foreground">
+              {militaryOnly ? "No military aircraft in range" : "No aircraft in range"}
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Map */}
+      <div className="flex-1 relative">
+        <Map center={center} zoom={8} className="h-full">
+          {displayedAircraft.map((ac) => (
+            <Marker
+              key={ac.hex}
+              position={[ac.lon, ac.lat]}
+              color={ac.isMilitary ? "#f59e0b" : "#ef4444"}
+              onClick={() => setSelectedHex(ac.hex)}
+            />
+          ))}
+        </Map>
+
+        {/* Selected Aircraft Panel */}
+        {selectedHex && (
+          <div className="absolute top-4 right-4 bg-card border rounded-lg p-4 shadow-lg min-w-[250px]">
+            {(() => {
+              const ac = data?.aircraft.find((a) => a.hex === selectedHex);
+              if (!ac) return null;
+              return (
+                <>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-mono font-semibold">
+                      {ac.callsign || "N/A"}
+                    </h3>
+                    {ac.isMilitary && (
+                      <span className="text-xs bg-amber-500/20 text-amber-600 px-2 py-0.5 rounded">
+                        MILITARY
+                      </span>
+                    )}
+                  </div>
+                  <div className="space-y-1.5 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Hex</span>
+                      <span className="font-mono">{ac.hex}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Type</span>
+                      <span>{ac.type || "Unknown"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Registration</span>
+                      <span>{ac.registration || "N/A"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Distance</span>
+                      <span>{ac.distance} mi</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Altitude</span>
+                      <span>{ac.altitude !== "N/A" ? `${ac.altitude} ft` : "N/A"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Speed</span>
+                      <span>{ac.speed !== "N/A" ? `${ac.speed} kts` : "N/A"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Heading</span>
+                      <span>{ac.heading !== "N/A" ? `${ac.heading}°` : "N/A"}</span>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="w-full mt-3"
+                    onClick={() => setSelectedHex(null)}
+                  >
+                    Close
+                  </Button>
+                </>
+              );
+            })()}
+          </div>
+        )}
+      </div>
     </div>
-  )
+  );
 }
