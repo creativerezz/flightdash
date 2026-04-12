@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { Map, Marker, useMap } from "@/components/map";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -49,11 +49,14 @@ export default function Page() {
   const [selectedHex, setSelectedHex] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [mobileView, setMobileView] = useState<"list" | "map">("list");
+  const [, forceTick] = useState(0);
+  const fetchedAtRef = useRef<number>(Date.now());
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await fetch("/api/aircraft");
+      const res = await fetch("/api/aircraft", { cache: "no-store" });
       const json = await res.json();
+      fetchedAtRef.current = Date.now();
       setData(json);
       setLastUpdated(new Date());
     } catch (e) {
@@ -65,17 +68,41 @@ export default function Page() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 10000);
+    const interval = setInterval(fetchData, 3000);
     return () => clearInterval(interval);
   }, [fetchData]);
 
-  const displayedAircraft = militaryOnly
-    ? data?.aircraft.filter((a) => a.isMilitary) || []
-    : data?.aircraft || [];
+  // Dead-reckoning tick: re-render every 250ms so markers glide forward
+  // along their last-known heading/ground-speed between fetches.
+  useEffect(() => {
+    const id = setInterval(() => forceTick((t) => t + 1), 250);
+    return () => clearInterval(id);
+  }, []);
 
-  const center: [number, number] = data
-    ? [data.center.lon, data.center.lat]
-    : [-117.388, 34.451];
+  // Recomputed every render (tick drives re-renders).
+  const dtSec = (Date.now() - fetchedAtRef.current) / 1000;
+  const interpolatedAircraft: Aircraft[] = data
+    ? data.aircraft.map((ac) => {
+        const speed = typeof ac.speed === "number" ? ac.speed : 0;
+        const heading = typeof ac.heading === "number" ? ac.heading : 0;
+        if (speed <= 0) return ac;
+        // knots → nm → degrees (1° latitude ≈ 60 nm)
+        const distDeg = ((speed / 3600) * dtSec) / 60;
+        const rad = (heading * Math.PI) / 180;
+        const dLat = distDeg * Math.cos(rad);
+        const cosLat = Math.max(Math.cos((ac.lat * Math.PI) / 180), 0.0001);
+        const dLon = (distDeg * Math.sin(rad)) / cosLat;
+        return { ...ac, lat: ac.lat + dLat, lon: ac.lon + dLon };
+      })
+    : [];
+
+  const displayedAircraft = militaryOnly
+    ? interpolatedAircraft.filter((a) => a.isMilitary)
+    : interpolatedAircraft;
+
+  const lon = data?.center.lon ?? -117.388;
+  const lat = data?.center.lat ?? 34.451;
+  const center = useMemo<[number, number]>(() => [lon, lat], [lon, lat]);
 
   return (
     <div className="h-screen flex flex-col bg-background">
@@ -201,7 +228,7 @@ export default function Page() {
           <div 
             key={`map-${mobileView}`}
             className={cn(
-              "absolute inset-0 lg:static lg:inset-auto",
+              "absolute inset-0 lg:static lg:inset-auto w-full h-full",
               mobileView === "map" ? "block" : "hidden lg:block"
             )}
           >
@@ -211,6 +238,7 @@ export default function Page() {
                   key={ac.hex}
                   position={[ac.lon, ac.lat]}
                   color={ac.isMilitary ? "#f59e0b" : "#ef4444"}
+                  rotation={typeof ac.heading === "number" ? ac.heading : 0}
                   onClick={() => setSelectedHex(ac.hex)}
                 />
               ))}

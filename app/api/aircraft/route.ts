@@ -46,7 +46,7 @@ interface Aircraft {
 export async function GET() {
   try {
     const url = `https://api.adsb.lol/v2/lat/${HOME_LAT}/lon/${HOME_LON}/dist/200`;
-    const response = await fetch(url, { next: { revalidate: 10 } });
+    const response = await fetch(url, { cache: "no-store" });
     const data = await response.json();
 
     const rawAircraft: AircraftRaw[] = data.ac || data.aircraft || [];
